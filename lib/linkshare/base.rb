@@ -2,6 +2,8 @@ module Linkshare
   class Base
     include HTTParty
     format :xml 
+
+    attr_reader :total_pages, :total_matches, :page_number
     
     @@credentials = {}
     @@default_params = {}
@@ -23,7 +25,6 @@ module Linkshare
       @@credentials['pass'] = pass.to_s
     end
     
-    
     class << self
       def base_url
         "http://cli.linksynergy.com/"
@@ -33,33 +34,27 @@ module Linkshare
         params = default_params.merge(provided_params)
         invalid_params = params.select{|k,v| !available_params.include?(k.to_s)}.map{|k,v| k}
         raise ArgumentError.new("Invalid parameters: #{invalid_params.join(', ')}") if invalid_params.length > 0
+        params
       end
       
       def get_service(path, query)
         query.keys.each{|k| query[k.to_s] = query.delete(k)}
-        query.merge!({'cuserid' => credentials['user_id'], 'cpi' => credentials['pass']})
 
         results = []
-        
         begin
+          # pairs = [] ; query.each_pair{|k,v| pairs << "#{k}=#{v}" } ; p "#{path}&#{pairs.join('&')}"
           response = get(path, :query => query, :timeout => 30)
         rescue Timeout::Error
           nil
         end
 
-        unless validate_response(response)
-          str = response.body #+ "1x1\t36342\tAdvertiser Y\t2163\t1/31/2002\t8:58\t32\t7.99\t1\t0.39\t2/1/2002\t12:46" #dummy data
-          str = str.gsub(" \t","\t").gsub("\t\n", "\n").gsub(" ", "_").gsub("($)", "").downcase!
-          
-          results = FasterCSV.parse(str, {:col_sep => "\t", :row_sep => "\n", :headers => true})
-        end
+        raise_if_invalid_response(response)
 
-        results.map{|r| self.new(r.to_hash)}
-      end # get
+        Crack::XML.parse(response.body)
+      end
       
       def credentials
         unless @@credentials && @@credentials.length > 0
-          # there is no offline or test mode for CJ - so I won't include any credentials in this gem
           config_file = ["config/linkshare.yml", File.join(ENV['HOME'], '.linkshare.yaml')].select{|f| File.exist?(f)}.first
 
           unless File.exist?(config_file)
@@ -69,9 +64,9 @@ module Linkshare
           end
         end
         @@credentials
-      end # credentails
+      end
       
-      def validate_response(response)
+      def raise_if_invalid_response(response)
         raise ArgumentError, "There was an error connecting to LinkShare's reporting server." if response.body.include?("REPORTING ERROR")
       end
       
@@ -79,6 +74,6 @@ module Linkshare
         find(params).first
       end
     
-    end # self
-  end # Base
-end # Linkshare
+    end
+  end
+end
