@@ -31,5 +31,9 @@ module Linkshare
         [advertiserid, type_match[1], bare_link_id].join('_')
       end
     end
+
+    def advertiser_id
+      advertiserid
+    end
   end # class
 end # module
